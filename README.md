@@ -25,6 +25,7 @@ php ./github-activity <username>
 ## Commands
 ```sh
 php ./github-activity --example
+php ./github-activity <username>
 ```
 
 ## Contributions
