@@ -1,0 +1,143 @@
+#!/usr/bin/php
+<?php
+// Challenge from https://roadmap.sh/projects/github-user-activity
+// Me da pereza comentar el codigo, leelo bajo tu propio riesgo.
+
+$header = [
+    "http" => [
+        "method" => "GET",
+        "header" => "User-Agent: php-github-activity/1.0\r\n",
+    ],
+];
+
+function api_req(string $url): mixed
+{
+    global $header;
+
+    $context = stream_context_create($header);
+
+    $response = @file_get_contents($url, false, $context);
+    if (empty($response) === false) {
+        die("Not found 404" . PHP_EOL);
+    }
+    $repos = json_decode($response, true);
+
+    return $repos;
+}
+
+function get_github_activity($username): mixed
+{
+    $url = "https://api.github.com/users/$username/events";
+    $activity = api_req($url);
+    return $activity;
+}
+
+class EventTypeTemplate implements JsonSerializable
+{
+    public string $type = "NonType";
+    public int $times = 0;
+    public array $repos = [];
+
+    public function __construct(string $type, int $times, string $repo_name)
+    {
+        $this->type = $type;
+        $this->times = $times;
+        $this->repos[] = $repo_name;
+    }
+
+    public function jsonSerialize(): array
+    {
+        return [
+            $this->type => ["times" => $this->times, "repos" => $this->repos],
+        ];
+    }
+
+    /**
+     * Merge two EventTypeTemplate Serialized parts of one object json
+     *
+     * @param array $event_template
+     * @param string $event
+     * @param string $repo_name
+     * @param bool $raise
+     * @return void
+     */
+    public static function merge(
+        array &$event_template,
+        string $event,
+        string $repo_name,
+        bool $raise
+    ): void {
+        if (isset($event_template[$event])) {
+            if ($raise) {
+                $event_template[$event]["times"] += 1;
+            }
+
+            $event_template[$event]["repos"][] = $repo_name;
+        } else {
+            //throw new Exception("Event type not found");
+            die("Event type not found");
+        }
+    }
+}
+
+// Output:
+//- Pushed 3 commits to kamranahmedse/developer-roadmap
+//- Opened a new issue in kamranahmedse/developer-roadmap
+//- Starred kamranahmedse/developer-roadmap
+//- ...
+
+function formatResponse($response): array
+{
+    $activities = [];
+
+    foreach ($response as $activity) {
+        if (isset($activities[$activity["type"]])) {
+            EventTypeTemplate::merge(
+                $activities,
+                $activity["type"],
+                $activity["repo"]["name"],
+                $raise = true
+            );
+        } else {
+            $activities[$activity["type"]] = (new EventTypeTemplate(
+                $activity["type"],
+                1,
+                $activity["repo"]["name"]
+            ))->jsonSerialize()[$activity["type"]];
+        }
+    }
+
+    foreach ($activities as &$event) {
+        $event["repos"] = array_count_values($event["repos"]);
+    }
+
+    return $activities;
+}
+
+function main(): void
+{
+    global $argv;
+
+    if (count($argv) > 1) {
+        $response =
+            $argv[1] == "--example"
+                ? get_github_activity("kamranahmedse")
+                : get_github_activity($argv[1]);
+
+        $activities = formatResponse($response);
+
+        echo "Output:" . PHP_EOL;
+
+        foreach ($activities as $event => $values) {
+            foreach ($values["repos"] as $name => $count) {
+                echo "- $event by $name " . $count . " times" . PHP_EOL;
+            }
+        }
+    } else {
+        echo "No arguments provided. Try ./github-activity <username> or ./github-activity \"--example\"" .
+            PHP_EOL;
+    }
+}
+
+main();
+
