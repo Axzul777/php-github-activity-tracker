@@ -6,7 +6,7 @@
 
 ## Features
 - No external libraries each thing on native php
-- Get hole events by username and show in the console
+- Get events by username and show in the console
 
 ## Requeriments
 php8^
